@@ -1,0 +1,42 @@
+import 'package:whisper_ggml/whisper_ggml.dart';
+
+class WhisperService {
+  final WhisperController _controller = WhisperController();
+  bool _isInitialized = false;
+
+  /// Transcribe audio file to text
+  /// 
+  /// [audioPath] - Path to .wav audio file
+  /// [threads] - Number of threads to use (default: 4)
+  /// Returns transcribed text or throws exception
+  Future<String> transcribe(
+    String audioPath, {
+    int threads = 4,
+  }) async {
+    try {
+      final result = await _controller.transcribe(
+        model: WhisperModel.small, // 244MB, good balance
+        audioPath: audioPath,
+        lang: 'en', // Force English
+        threads: threads,
+      );
+
+      if (result?.transcription.text != null) {
+        _isInitialized = true;
+        return result!.transcription.text;
+      } else {
+        throw Exception('Transcription returned null');
+      }
+    } catch (e) {
+      throw Exception('Whisper transcription failed: $e');
+    }
+  }
+
+  /// Check if Whisper has been initialized
+  bool get isInitialized => _isInitialized;
+
+  /// Clean up resources
+  void dispose() {
+    _controller.dispose();
+  }
+}

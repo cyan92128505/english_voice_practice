@@ -1,0 +1,52 @@
+name: english_voice_practice
+description: AI-powered English learning assistant with speech recognition and grammar correction
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State management
+  flutter_riverpod: ^2.5.1
+  
+  # Speech recognition
+  whisper_ggml: ^1.7.0
+  
+  # Audio recording
+  record: ^5.1.2
+  
+  # Permissions
+  permission_handler: ^11.3.1
+  
+  # File system
+  path_provider: ^2.1.4
+  path: ^1.9.0
+  
+  # Database
+  sqflite: ^2.3.3+1
+  
+  # HTTP client
+  http: ^1.2.2
+  
+  # UI
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # If you want to bundle the Whisper model in the app (optional)
+  # This increases app size by ~244MB but enables offline use from first launch
+  # assets:
+  #   - assets/models/ggml-small.en.bin
+
+# Run with API key:
+# flutter run --dart-define=OPENAI_API_KEY=your_key_here

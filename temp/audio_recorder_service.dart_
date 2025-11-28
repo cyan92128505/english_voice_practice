@@ -1,0 +1,56 @@
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+
+class AudioRecorderService {
+  final AudioRecorder _recorder = AudioRecorder();
+  String? _currentPath;
+
+  /// Check if microphone permission is granted
+  Future<bool> hasPermission() async {
+    return await _recorder.hasPermission();
+  }
+
+  /// Start recording audio
+  /// 
+  /// Audio is saved as 16kHz mono WAV file
+  /// Returns path where audio will be saved
+  Future<String> startRecording() async {
+    final hasPermission = await this.hasPermission();
+    if (!hasPermission) {
+      throw Exception('Microphone permission denied');
+    }
+
+    final dir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    _currentPath = '${dir.path}/voice_$timestamp.wav';
+
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.wav,
+        sampleRate: 16000, // Whisper recommended sample rate
+        numChannels: 1, // Mono audio
+      ),
+      path: _currentPath!,
+    );
+
+    return _currentPath!;
+  }
+
+  /// Stop recording and return audio file path
+  /// 
+  /// Returns null if no recording in progress
+  Future<String?> stopRecording() async {
+    final path = await _recorder.stop();
+    return path;
+  }
+
+  /// Check if currently recording
+  Future<bool> isRecording() async {
+    return await _recorder.isRecording();
+  }
+
+  /// Clean up resources
+  void dispose() {
+    _recorder.dispose();
+  }
+}

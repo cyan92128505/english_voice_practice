@@ -1,0 +1,385 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:english_voice_practice/models/models.dart';
+import 'package:english_voice_practice/providers/providers.dart';
+
+class PracticeScreen extends ConsumerStatefulWidget {
+  const PracticeScreen({super.key});
+
+  @override
+  ConsumerState<PracticeScreen> createState() => _PracticeScreenState();
+}
+
+class _PracticeScreenState extends ConsumerState<PracticeScreen> {
+  bool _isRecording = false;
+  bool _isProcessing = false;
+  String? _transcribedText;
+  CorrectionResult? _correction;
+  String? _currentAudioPath;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('English Voice Practice'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              // TODO: Navigate to history screen
+            },
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildStatsBar(),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildRecordButton(),
+                    const SizedBox(height: 20),
+                    Text(
+                      _isRecording
+                          ? 'Recording...'
+                          : _isProcessing
+                              ? 'Processing...'
+                              : 'Hold to speak English',
+                      style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_transcribedText != null) _buildResultsCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsBar() {
+    final todayCount = ref.watch(todayPracticeCountProvider);
+    final streak = ref.watch(currentStreakProvider);
+    final accuracy = ref.watch(accuracyProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        border: Border(bottom: BorderSide(color: Colors.blue[100]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem(
+            Icons.today,
+            'Today',
+            todayCount.when(
+              data: (c) => c.toString(),
+              loading: () => '-',
+              error: (_, __) => '0',
+            ),
+          ),
+          _buildStatItem(
+            Icons.local_fire_department,
+            'Streak',
+            streak.when(
+              data: (d) => '$d days',
+              loading: () => '-',
+              error: (_, __) => '0',
+            ),
+          ),
+          _buildStatItem(
+            Icons.check_circle,
+            'Accuracy',
+            accuracy.when(
+              data: (a) => '${a.toStringAsFixed(0)}%',
+              loading: () => '-',
+              error: (_, __) => '0%',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String label, String value) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.blue),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildRecordButton() {
+    return GestureDetector(
+      onLongPressStart: (_) => _startRecording(),
+      onLongPressEnd: (_) => _stopRecording(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: _isRecording ? 220 : 200,
+        height: _isRecording ? 220 : 200,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: _isRecording
+                ? [Colors.red[400]!, Colors.red[600]!]
+                : [Colors.blue[400]!, Colors.blue[600]!],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (_isRecording ? Colors.red : Colors.blue).withOpacity(0.5),
+              blurRadius: _isRecording ? 30 : 20,
+              spreadRadius: _isRecording ? 10 : 5,
+            ),
+          ],
+        ),
+        child: Center(
+          child: _isProcessing
+              ? const CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                )
+              : Icon(
+                  _isRecording ? Icons.mic : Icons.mic_none,
+                  size: 80,
+                  color: Colors.white,
+                ),
+        ),
+      ),
+    );
+  }
+
+  // Continue in part 2...
+  Widget _buildResultsCard() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 350),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSection(
+                  icon: Icons.record_voice_over,
+                  title: 'You said:',
+                  content: _transcribedText ?? '',
+                  color: Colors.blue,
+                ),
+                if (_correction != null) ..._buildCorrectionSection(),
+                const SizedBox(height: 16),
+                _buildActionButtons(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSection({
+    required IconData icon,
+    required String title,
+    required String content,
+    required Color color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(content, style: const TextStyle(fontSize: 16)),
+      ],
+    );
+  }
+
+  List<Widget> _buildCorrectionSection() {
+    if (_correction == null) return [];
+
+    return [
+      const Divider(height: 24),
+      if (_correction!.hasErrors) ...[
+        _buildSection(
+          icon: Icons.edit,
+          title: 'Corrected:',
+          content: _correction!.corrected,
+          color: Colors.green,
+        ),
+        const SizedBox(height: 16),
+        _buildErrorsList(_correction!.errors),
+        if (_correction!.suggestions != null) ...[
+          const SizedBox(height: 16),
+          _buildSection(
+            icon: Icons.lightbulb_outline,
+            title: 'Better way:',
+            content: _correction!.suggestions!,
+            color: Colors.orange,
+          ),
+        ],
+      ] else ...[
+        Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.green, size: 32),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Perfect! Your English is correct.',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ];
+  }
+
+  Widget _buildErrorsList(List<String> errors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.error_outline, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Errors found:',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...errors.map((e) => Padding(
+              padding: const EdgeInsets.only(left: 28, bottom: 4),
+              child: Text('• $e', style: TextStyle(color: Colors.red[700])),
+            )),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        TextButton.icon(
+          icon: const Icon(Icons.save),
+          label: const Text('Save'),
+          onPressed: _saveToHistory,
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          icon: const Icon(Icons.refresh),
+          label: const Text('Try Again'),
+          onPressed: _clearResults,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _startRecording() async {
+    final hasPermission = await ref.read(audioRecorderProvider).hasPermission();
+    if (!hasPermission) {
+      _showError('Microphone permission required');
+      return;
+    }
+
+    setState(() {
+      _isRecording = true;
+      _transcribedText = null;
+      _correction = null;
+    });
+
+    try {
+      _currentAudioPath = await ref.read(audioRecorderProvider).startRecording();
+    } catch (e) {
+      _showError('Failed to start recording: $e');
+      setState(() => _isRecording = false);
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    if (!_isRecording) return;
+
+    setState(() {
+      _isRecording = false;
+      _isProcessing = true;
+    });
+
+    try {
+      final audioPath = await ref.read(audioRecorderProvider).stopRecording();
+      if (audioPath == null) throw Exception('No audio recorded');
+
+      final text = await ref.read(whisperServiceProvider).transcribe(audioPath);
+      setState(() => _transcribedText = text);
+
+      final correction = await ref.read(chatGPTServiceProvider).correctEnglish(text);
+      setState(() => _correction = correction);
+    } catch (e) {
+      _showError('Error: ${e.toString()}');
+    } finally {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _saveToHistory() async {
+    if (_transcribedText == null || _correction == null || _currentAudioPath == null) {
+      return;
+    }
+
+    try {
+      final record = PracticeRecord.fromCorrectionResult(
+        audioPath: _currentAudioPath!,
+        transcription: _transcribedText!,
+        correction: _correction!,
+      );
+
+      await ref.read(databaseServiceProvider).savePractice(record);
+      ref.invalidate(todayPracticeCountProvider);
+      ref.invalidate(currentStreakProvider);
+      ref.invalidate(accuracyProvider);
+
+      _showSuccess('Saved to history');
+      _clearResults();
+    } catch (e) {
+      _showError('Failed to save: $e');
+    }
+  }
+
+  void _clearResults() {
+    setState(() {
+      _transcribedText = null;
+      _correction = null;
+      _currentAudioPath = null;
+    });
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}

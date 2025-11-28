@@ -1,0 +1,60 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:english_voice_practice/services/whisper_service.dart';
+import 'package:english_voice_practice/services/audio_recorder_service.dart';
+import 'package:english_voice_practice/services/chatgpt_service.dart';
+import 'package:english_voice_practice/services/database_service.dart';
+
+/// Whisper service provider
+final whisperServiceProvider = Provider<WhisperService>((ref) {
+  final service = WhisperService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+/// Audio recorder service provider
+final audioRecorderProvider = Provider<AudioRecorderService>((ref) {
+  final service = AudioRecorderService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+/// ChatGPT service provider
+/// 
+/// TODO: Replace with your actual API key
+/// Better approach: Load from environment variables or secure storage
+final chatGPTServiceProvider = Provider<ChatGPTService>((ref) {
+  const apiKey = String.fromEnvironment(
+    'OPENAI_API_KEY',
+    defaultValue: 'your_api_key_here',
+  );
+  return ChatGPTService(apiKey);
+});
+
+/// Database service provider
+final databaseServiceProvider = Provider<DatabaseService>((ref) {
+  return DatabaseService();
+});
+
+/// Today's practice count provider
+final todayPracticeCountProvider = FutureProvider<int>((ref) async {
+  final db = ref.watch(databaseServiceProvider);
+  return await db.getTodayPracticeCount();
+});
+
+/// Current streak provider
+final currentStreakProvider = FutureProvider<int>((ref) async {
+  final db = ref.watch(databaseServiceProvider);
+  return await db.getCurrentStreak();
+});
+
+/// Accuracy provider
+final accuracyProvider = FutureProvider<double>((ref) async {
+  final db = ref.watch(databaseServiceProvider);
+  return await db.getAccuracy();
+});
+
+/// Practice history provider
+final practiceHistoryProvider = FutureProvider((ref) async {
+  final db = ref.watch(databaseServiceProvider);
+  return await db.getAllPractices();
+});

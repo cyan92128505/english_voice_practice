@@ -1,0 +1,86 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:english_voice_practice/models/models.dart';
+
+class ChatGPTService {
+  final String apiKey;
+  static const String _baseUrl = 'https://api.openai.com/v1/chat/completions';
+
+  ChatGPTService(this.apiKey);
+
+  /// Correct English grammar and provide suggestions
+  /// 
+  /// [text] - The English text to correct
+  /// Returns [CorrectionResult] with corrections and suggestions
+  Future<CorrectionResult> correctEnglish(String text) async {
+    if (text.trim().isEmpty) {
+      throw Exception('Text cannot be empty');
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': 'gpt-4o-mini',
+          'messages': [
+            {
+              'role': 'system',
+              'content': _buildSystemPrompt(),
+            },
+            {
+              'role': 'user',
+              'content': text,
+            }
+          ],
+          'temperature': 0.3, // Lower randomness for consistency
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'] as String;
+
+        // Parse JSON response from GPT
+        final resultJson = jsonDecode(content);
+        return CorrectionResult.fromJson(resultJson);
+      } else if (response.statusCode == 401) {
+        throw Exception('Invalid API key');
+      } else if (response.statusCode == 429) {
+        throw Exception('Rate limit exceeded. Please try again later.');
+      } else {
+        throw Exception('API error: ${response.statusCode}');
+      }
+    } catch (e) {
+      if (e is FormatException) {
+        throw Exception('Failed to parse API response');
+      }
+      rethrow;
+    }
+  }
+
+  String _buildSystemPrompt() {
+    return '''You are an English tutor helping non-native speakers improve their English.
+
+Analyze the input text and provide feedback in the following JSON format:
+
+{
+  "original": "the exact input text",
+  "corrected": "corrected version if errors exist, otherwise same as original",
+  "hasErrors": true or false,
+  "errors": ["list of specific grammar errors found"],
+  "suggestions": "optional: better way to express the same idea, more natural phrasing"
+}
+
+Rules:
+- Be encouraging and supportive
+- Focus on common ESL mistakes (articles, prepositions, tense, word order)
+- Keep corrections simple and clear
+- Suggestions should be natural and conversational
+- If the text is perfect, set hasErrors to false and errors to empty array
+- Always respond with ONLY valid JSON, no other text''';
+  }
+}

@@ -1,0 +1,169 @@
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+import 'package:english_voice_practice/models/models.dart';
+
+class DatabaseService {
+  static final DatabaseService _instance = DatabaseService._internal();
+  factory DatabaseService() => _instance;
+  DatabaseService._internal();
+
+  Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    final databasePath = await getDatabasesPath();
+    final path = join(databasePath, 'english_practice.db');
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: _onCreate,
+    );
+  }
+
+  Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE practice_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        audioPath TEXT NOT NULL,
+        transcription TEXT NOT NULL,
+        corrected TEXT NOT NULL,
+        hasErrors INTEGER NOT NULL,
+        errors TEXT NOT NULL,
+        suggestions TEXT,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
+    // Create index for faster queries
+    await db.execute('''
+      CREATE INDEX idx_created_at ON practice_records(createdAt DESC)
+    ''');
+  }
+
+  /// Initialize database (call on app startup)
+  Future<void> initialize() async {
+    await database;
+  }
+
+  /// Save a practice record
+  Future<int> savePractice(PracticeRecord record) async {
+    final db = await database;
+    return await db.insert('practice_records', record.toMap());
+  }
+
+  /// Get all practice records, newest first
+  Future<List<PracticeRecord>> getAllPractices() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'practice_records',
+      orderBy: 'createdAt DESC',
+    );
+
+    return maps.map((map) => PracticeRecord.fromMap(map)).toList();
+  }
+
+  /// Get practices for a specific date
+  Future<List<PracticeRecord>> getPracticesByDate(DateTime date) async {
+    final db = await database;
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'practice_records',
+      where: 'createdAt >= ? AND createdAt < ?',
+      whereArgs: [
+        startOfDay.toIso8601String(),
+        endOfDay.toIso8601String(),
+      ],
+      orderBy: 'createdAt DESC',
+    );
+
+    return maps.map((map) => PracticeRecord.fromMap(map)).toList();
+  }
+
+  /// Get practice count for today
+  Future<int> getTodayPracticeCount() async {
+    final today = DateTime.now();
+    final practices = await getPracticesByDate(today);
+    return practices.length;
+  }
+
+  /// Get current streak (consecutive days of practice)
+  Future<int> getCurrentStreak() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'practice_records',
+      columns: ['createdAt'],
+      orderBy: 'createdAt DESC',
+    );
+
+    if (maps.isEmpty) return 0;
+
+    final dates = maps
+        .map((map) => DateTime.parse(map['createdAt'] as String))
+        .map((dt) => DateTime(dt.year, dt.month, dt.day))
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    int streak = 0;
+    DateTime expectedDate = DateTime.now();
+    expectedDate = DateTime(expectedDate.year, expectedDate.month, expectedDate.day);
+
+    for (final date in dates) {
+      if (date == expectedDate || date == expectedDate.subtract(const Duration(days: 1))) {
+        streak++;
+        expectedDate = date.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
+
+  /// Calculate accuracy (percentage of practices without errors)
+  Future<double> getAccuracy() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN hasErrors = 0 THEN 1 ELSE 0 END) as correct
+      FROM practice_records
+    ''');
+
+    final total = result[0]['total'] as int;
+    final correct = result[0]['correct'] as int;
+
+    if (total == 0) return 0.0;
+    return (correct / total) * 100;
+  }
+
+  /// Delete a practice record
+  Future<int> deletePractice(int id) async {
+    final db = await database;
+    return await db.delete(
+      'practice_records',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Delete all practice records (use with caution)
+  Future<int> deleteAllPractices() async {
+    final db = await database;
+    return await db.delete('practice_records');
+  }
+
+  /// Close database connection
+  Future<void> close() async {
+    final db = await database;
+    await db.close();
+  }
+}
